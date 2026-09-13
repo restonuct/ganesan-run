@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Eco-Friendly Ganesh Chaturthi Chase</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Google Fonts: Outfit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="game-container">
+    <!-- WebGL Rendering Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Top In-Game HUD -->
+    <header id="game-hud" class="game-hud">
+      <!-- Modaks (Total Coins Bank) -->
+      <div class="hud-pill hud-pill-gold" title="Total Modak Bank Balance (Persisted)">
+        <span class="hud-icon">🟡</span>
+        <div class="hud-text-stack">
+          <div class="hud-main"><span id="modak-score">0</span></div>
+          <div class="hud-sub">Run: +<span id="run-modak-score">0</span></div>
+        </div>
+      </div>
+
+      <!-- Mooshikan Shield Counter & Multiplier Badge -->
+      <div class="hud-center-group">
+        <div class="hud-pill hud-pill-shield" title="Mooshikan Steed (Double Tap or B to activate)">
+          <span class="hud-icon hud-mouse-icon" aria-label="Mooshikan">
+            <svg class="mooshikan-svg-icon" viewBox="0 0 32 32" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="8" cy="9" r="6" fill="#a855f7" stroke="#fbbf24" stroke-width="2"/>
+              <circle cx="8" cy="9" r="3" fill="#ec4899"/>
+              <circle cx="24" cy="9" r="6" fill="#a855f7" stroke="#fbbf24" stroke-width="2"/>
+              <circle cx="24" cy="9" r="3" fill="#ec4899"/>
+              <ellipse cx="16" cy="19" rx="10" ry="9" fill="#9333ea" stroke="#fbbf24" stroke-width="2"/>
+              <ellipse cx="16" cy="18" rx="8" ry="7" fill="#a855f7"/>
+              <circle cx="12" cy="16" r="2" fill="#1e1b4b"/>
+              <circle cx="20" cy="16" r="2" fill="#1e1b4b"/>
+              <circle cx="12.7" cy="15.3" r="0.7" fill="#ffffff"/>
+              <circle cx="20.7" cy="15.3" r="0.7" fill="#ffffff"/>
+              <polygon points="16,19 14,21.5 18,21.5" fill="#f43f5e"/>
+              <line x1="6" y1="19" x2="12" y2="20" stroke="#fef08a" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="6" y1="22" x2="12" y2="22" stroke="#fef08a" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="26" y1="19" x2="20" y2="20" stroke="#fef08a" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="26" y1="22" x2="20" y2="22" stroke="#fef08a" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <div class="hud-text-stack">
+            <div class="hud-main">x<span id="boards-count">3</span></div>
+            <div class="hud-sub">Mooshikan</div>
+          </div>
+          <button id="hud-buy-board-btn" class="hud-buy-pill-btn" title="Buy 1 Mooshikan Board (30 🟡)">+🛒</button>
+        </div>
+        <div id="hud-mult-badge" class="hud-pill hud-pill-mult hidden">
+          <span class="hud-icon">⭐</span>
+          <div class="hud-main">2X</div>
+        </div>
+      </div>
+
+      <!-- Eco-Score (Distance / Cleanups) -->
+      <div class="hud-pill hud-pill-green">
+        <span class="hud-icon">🌱</span>
+        <div class="hud-text-stack">
+          <div class="hud-main"><span id="eco-score">0</span> m</div>
+          <div class="hud-sub">Best: <span id="best-eco-score">0</span> m</div>
+        </div>
+      </div>
+
+      <!-- Actions: Shop, Pause & Sound -->
+      <div class="hud-actions-group">
+        <button id="shop-btn" class="hud-action-btn hud-shop-btn" aria-label="Open Shop" title="Mooshikan Workshop (Shop)">
+          🛒
+        </button>
+        <button id="pause-btn" class="hud-action-btn" aria-label="Pause Game" title="Pause Game (Esc or P)">
+          ⏸️
+        </button>
+        <button id="sound-btn" class="hud-action-btn" aria-label="Toggle Sound" title="Toggle Sound">
+          🔊
+        </button>
+      </div>
+    </header>
+
+    <!-- Active Power-Ups Shelf -->
+    <aside id="powerups-shelf" class="powerups-shelf">
+      <!-- Jetpack HUD Item -->
+      <div id="hud-jetpack" class="powerup-card hud-jetpack">
+        <div class="powerup-header">
+          <span class="powerup-icon">🚀</span>
+          <span class="powerup-name">Jetpack</span>
+          <span id="jetpack-time" class="powerup-time">10.0s</span>
+        </div>
+        <div class="progress-track">
+          <div id="jetpack-bar" class="progress-fill bar-jetpack"></div>
+        </div>
+      </div>
+
+      <!-- Super Sneakers HUD Item -->
+      <div id="hud-sneakers" class="powerup-card hud-sneakers">
+        <div class="powerup-header">
+          <span class="powerup-icon">👟</span>
+          <span class="powerup-name">Super Sneakers</span>
+          <span id="sneakers-time" class="powerup-time">14.0s</span>
+        </div>
+        <div class="progress-track">
+          <div id="sneakers-bar" class="progress-fill bar-sneakers"></div>
+        </div>
+      </div>
+
+      <!-- Coin Magnet HUD Item -->
+      <div id="hud-magnet" class="powerup-card hud-magnet">
+        <div class="powerup-header">
+          <span class="powerup-icon">🧲</span>
+          <span class="powerup-name">Coin Magnet</span>
+          <span id="magnet-time" class="powerup-time">15.0s</span>
+        </div>
+        <div class="progress-track">
+          <div id="magnet-bar" class="progress-fill bar-magnet"></div>
+        </div>
+      </div>
+
+      <!-- 2X Multiplier HUD Item -->
+      <div id="hud-multiplier" class="powerup-card hud-multiplier">
+        <div class="powerup-header">
+          <span class="powerup-icon">⭐</span>
+          <span class="powerup-name">2x Score</span>
+          <span id="multiplier-time" class="powerup-time">18.0s</span>
+        </div>
+        <div class="progress-track">
+          <div id="multiplier-bar" class="progress-fill bar-multiplier"></div>
+        </div>
+      </div>
+
+      <!-- Divine Gada (Mace) HUD Item -->
+      <div id="hud-gada" class="powerup-card hud-gada">
+        <div class="powerup-header">
+          <span class="powerup-icon">🔱</span>
+          <span class="powerup-name">Divine Gada</span>
+          <span id="gada-time" class="powerup-time">12.0s</span>
+        </div>
+        <div class="progress-track">
+          <div id="gada-bar" class="progress-fill bar-gada"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Minimal Controls Hint Overlay (Fades out when running) -->
+    <div id="controls-hint" class="controls-hint">
+      <span>⌨️ <b>←</b> <b>→</b> / <b>A</b> <b>D</b> Lanes</span>
+      <span class="dot">•</span>
+      <span><b>Space</b> / <b>↑</b> Jump</span>
+      <span class="dot">•</span>
+      <span><b>↓</b> / <b>S</b> Slide &amp; Stomp</span>
+      <span class="dot">•</span>
+      <span><b>Double-Tap</b> / <b>B</b> Shield</span>
+    </div>
+
+    <!-- ==========================================
+         Glassmorphic Pause Modal Overlay
+         ========================================== -->
+    <div id="pause-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+      <div class="glass-modal">
+        <div class="modal-header">
+          <span class="modal-badge pause-badge">PAUSED</span>
+          <h2 id="pause-title" class="modal-title">Game Paused</h2>
+          <p class="modal-subtitle">Take a breather — the eco-chase is paused.</p>
+        </div>
+
+        <div class="modal-stats-row">
+          <div class="modal-stat-pill">
+            <span class="stat-icon">🟡</span>
+            <div class="stat-text-stack">
+              <span class="stat-label">Modaks</span>
+              <span id="pause-modaks" class="stat-val highlight-gold">0</span>
+            </div>
+          </div>
+          <div class="modal-stat-pill">
+            <span class="stat-icon">🌱</span>
+            <div class="stat-text-stack">
+              <span class="stat-label">Distance</span>
+              <span id="pause-distance" class="stat-val highlight-green">0 m</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-buttons">
+          <button id="resume-btn" class="btn btn-primary" title="Resume Game">
+            ▶ Resume Game
+          </button>
+          <button id="pause-shop-btn" class="btn btn-gold" title="Visit Mooshikan Shop">
+            🛒 Mooshikan Shop
+          </button>
+          <button id="pause-restart-btn" class="btn btn-secondary" title="Restart Run">
+            🔄 Restart Run
+          </button>
+        </div>
+        <div class="modal-tip">Press <b>Esc</b> or <b>P</b> to Resume</div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         Glassmorphic AAA Game Over Screen
+         ========================================== -->
+    <div id="gameover-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="gameover-title">
+      <div class="glass-modal gameover-modal">
+        <div class="modal-header">
+          <span class="modal-badge divine-badge">DIVINE BLESSING</span>
+          <h2 id="gameover-title" class="modal-title gameover-title">Sacred Run Complete</h2>
+          <p class="modal-subtitle">Lord Ganesha blessed the sacred grounds and ascended into the heavens.</p>
+        </div>
+
+        <div class="gameover-grid">
+          <!-- Total Modaks -->
+          <div class="gameover-stat-card">
+            <span class="stat-icon">🟡</span>
+            <div class="stat-info">
+              <span class="stat-label">Total Modaks</span>
+              <span id="gameover-modaks" class="stat-val highlight-gold">0</span>
+            </div>
+            <span id="gameover-best-modaks" class="stat-best">Best: 0</span>
+          </div>
+
+          <!-- Eco-Score -->
+          <div class="gameover-stat-card">
+            <span class="stat-icon">🌱</span>
+            <div class="stat-info">
+              <span class="stat-label">Eco-Score</span>
+              <span id="gameover-eco" class="stat-val highlight-green">0</span>
+            </div>
+            <span class="stat-best">Purity Rating</span>
+          </div>
+
+          <!-- Distance Traveled -->
+          <div class="gameover-stat-card">
+            <span class="stat-icon">🏃</span>
+            <div class="stat-info">
+              <span class="stat-label">Distance Traveled</span>
+              <span id="gameover-distance" class="stat-val highlight-cyan">0 m</span>
+            </div>
+            <span id="gameover-best-distance" class="stat-best">Best: 0 m</span>
+          </div>
+        </div>
+
+        <!-- Lifetime Stats Row -->
+        <div class="gameover-lifetime-row">
+          <div class="lifetime-stat-pill">
+            <span class="lifetime-icon">🌟</span>
+            <div class="lifetime-text">
+              <span class="lifetime-label">Lifetime Modaks</span>
+              <span id="gameover-lifetime-modaks" class="lifetime-val highlight-gold">0</span>
+            </div>
+          </div>
+          <div class="lifetime-stat-pill">
+            <span class="lifetime-icon">🎮</span>
+            <div class="lifetime-text">
+              <span class="lifetime-label">Runs Played</span>
+              <span id="gameover-runs-played" class="lifetime-val highlight-cyan">0</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-buttons">
+          <button id="play-again-btn" class="btn btn-primary btn-large" title="Play Again">
+            ⚡ Play Again
+          </button>
+          <button id="gameover-shop-btn" class="btn btn-gold btn-large" title="Visit Mooshikan Shop">
+            🛒 Mooshikan Shop
+          </button>
+          <button id="reset-storage-btn" class="btn btn-danger-outline" title="Reset all progress and high scores">
+            🔄 Reset Stats
+          </button>
+        </div>
+        <div class="modal-tip">Press <b>Space</b> or <b>Enter</b> to Chase Again</div>
+      </div>
+    </div>
+
+    <!-- ==========================================
+         Glassmorphic Mooshikan Workshop / Shop Modal
+         ========================================== -->
+    <div id="shop-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shop-title">
+      <div class="glass-modal shop-modal">
+        <button id="shop-close-btn" class="modal-close-btn" aria-label="Close Shop" title="Close (Esc)">✕</button>
+
+        <div class="modal-header">
+          <span class="modal-badge shop-badge">DIVINE WORKSHOP</span>
+          <h2 id="shop-title" class="modal-title shop-title">Mooshikan Store</h2>
+          <p class="modal-subtitle">Summon divine Mooshikan Skateboards to shield Lord Ganesha from obstacles!</p>
+        </div>
+
+        <!-- Wallet & Inventory Status Bar -->
+        <div class="shop-wallet-bar">
+          <div class="shop-wallet-pill">
+            <span class="wallet-icon">🟡</span>
+            <div class="wallet-info">
+              <span class="wallet-label">Available Modaks</span>
+              <span id="shop-modak-balance" class="wallet-val highlight-gold">0</span>
+            </div>
+          </div>
+          <div class="shop-wallet-pill">
+            <span class="wallet-icon">🛡️</span>
+            <div class="wallet-info">
+              <span class="wallet-label">Board Inventory</span>
+              <span id="shop-board-count" class="wallet-val highlight-purple">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Shop Items Grid -->
+        <div class="shop-items-grid">
+          <!-- 1 Board: 30 Modaks -->
+          <div class="shop-card">
+            <div class="shop-card-visual">
+              <span class="shop-board-icon">🛹</span>
+              <span class="shop-card-qty">x1</span>
+            </div>
+            <div class="shop-card-details">
+              <h3 class="shop-item-name">Single Mooshikan</h3>
+              <p class="shop-item-desc">1 Crash Shield. Breaks an obstacle on impact so you continue running smoothly.</p>
+            </div>
+            <div class="shop-card-action">
+              <button id="buy-board-1" class="btn btn-shop-buy" data-qty="1" data-cost="30">
+                <span class="buy-price">🟡 30</span>
+                <span class="buy-label">Buy 1</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 3 Boards Bundle: 75 Modaks (Save 15) -->
+          <div class="shop-card featured">
+            <div class="shop-badge-pill popular">SAVE 15 🟡</div>
+            <div class="shop-card-visual">
+              <span class="shop-board-icon">🛹</span>
+              <span class="shop-card-qty highlight-gold">x3</span>
+            </div>
+            <div class="shop-card-details">
+              <h3 class="shop-item-name">Triple Fleet</h3>
+              <p class="shop-item-desc">3 Crash Shields. Ideal for ambitious long runs and high-score chases.</p>
+            </div>
+            <div class="shop-card-action">
+              <button id="buy-board-3" class="btn btn-shop-buy" data-qty="3" data-cost="75">
+                <span class="buy-price">🟡 75</span>
+                <span class="buy-label">Buy 3</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 5 Boards Bundle: 110 Modaks (Save 40) -->
+          <div class="shop-card best-value">
+            <div class="shop-badge-pill value">BEST VALUE • SAVE 40 🟡</div>
+            <div class="shop-card-visual">
+              <span class="shop-board-icon">🛹</span>
+              <span class="shop-card-qty highlight-cyan">x5</span>
+            </div>
+            <div class="shop-card-details">
+              <h3 class="shop-item-name">Divine Armada</h3>
+              <p class="shop-item-desc">5 Crash Shields. Maximum protection for setting legendary distance records!</p>
+            </div>
+            <div class="shop-card-action">
+              <button id="buy-board-5" class="btn btn-shop-buy" data-qty="5" data-cost="110">
+                <span class="buy-price">🟡 110</span>
+                <span class="buy-label">Buy 5</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-tip">💡 Double-tap screen or press <b>B</b> to summon a board during the run!</div>
+      </div>
+    </div>
+
+    <!-- Floating Toast Notification -->
+    <div id="toast-notification" class="toast-notification hidden" role="status" aria-live="polite"></div>
+  </div>
+
+  <!-- Three.js r128 CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Three.js GLTFLoader -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <!-- Production Game Engine -->
+  <script src="main.js"></script>
+</body>
+</html>
