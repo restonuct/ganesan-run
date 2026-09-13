@@ -1,5 +1,9 @@
 # 🐘 Eco-Friendly Ganesh Chaturthi Chase
 
+<p align="center">
+  <img src="title_logo.jpg" alt="Eco-Friendly Ganesh Chase Title Logo" width="100%" style="max-width: 820px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
+</p>
+
 [![Three.js](https://img.shields.io/badge/Three.js-r128-black?style=for-the-badge&logo=three.js)](https://threejs.org/)
 [![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
 [![WebGL](https://img.shields.io/badge/WebGL-2.0-990000?style=for-the-badge&logo=webgl)](https://www.khronos.org/webgl/)
