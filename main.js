@@ -79,6 +79,7 @@
   let gadaTimer = 0;
   let activeGadaMesh = null;
   let lastPowerupSpawnDistance = -200.0;// Minimum 350m spacing tracker
+  let lastWaveSpawnDistance = 0;        // Distance-based wave pacing tracker (guarantees no bunching)
   let cameraShakeTimer = 0;
 
   // Invincibility (after board shield breaks or jetpack landing)
@@ -609,6 +610,28 @@
       chimeGain.connect(audioCtx.destination);
       chime.start();
       chime.stop(now + 0.35);
+    } catch (e) {}
+  }
+
+  function playSideBumpSound() {
+    if (!soundEnabled || !audioCtx) return;
+    try {
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(180, now);
+      osc.frequency.exponentialRampToValueAtTime(70, now + 0.11);
+
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.12);
     } catch (e) {}
   }
 
@@ -2378,7 +2401,56 @@
   // ==========================================
   // DYNAMIC PROCEDURAL SPAWNING SYSTEM
   // ==========================================
+  // ----------------------------------------------------
+  // ROBUST SPATIAL CLEARANCE & NO-OVERLAP CHECKS
+  // ----------------------------------------------------
+  function isLaneClearForObstacle(lane, targetZ, halfLength, minGap = 16.0) {
+    const minZ = targetZ - halfLength - minGap;
+    const maxZ = targetZ + halfLength + minGap;
+
+    for (let i = 0; i < activeObstacles.length; i++) {
+      const obs = activeObstacles[i];
+      if (obs.lane !== lane) continue;
+
+      const obsHalfL = (obs.length || 24.0) / 2;
+      const obsZ = obs.mesh.position.z;
+      const obsMinZ = obsZ - obsHalfL;
+      const obsMaxZ = obsZ + obsHalfL;
+
+      // Check 1D bounding box interval overlap
+      if (maxZ >= obsMinZ && minZ <= obsMaxZ) {
+        return false; // Spatial overlap detected!
+      }
+
+      // Moving obstacle differential headway buffer
+      if (obs.extraSpeed && obs.extraSpeed > 0) {
+        if (Math.abs(obsZ - targetZ) < (halfLength + obsHalfL + 28.0)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function getLaneTruckStatusAtZ(lane, targetZ, windowRadius = 18.0) {
+    for (let i = 0; i < activeObstacles.length; i++) {
+      const obs = activeObstacles[i];
+      if (obs.lane !== lane || obs.type !== 'truck') continue;
+
+      const obsHalfL = (obs.length || 24.0) / 2;
+      if (Math.abs(obs.mesh.position.z - targetZ) <= (obsHalfL + windowRadius)) {
+        return obs.hasRamp ? 'ramp' : 'solid';
+      }
+    }
+    return 'none';
+  }
+
   function spawnTruckInLane(lane, variant, spawnZ) {
+    // Spatial clearance check: NEVER place a truck on top of or overlapping another obstacle!
+    if (!isLaneClearForObstacle(lane, spawnZ, TRUCK_LENGTH / 2, 16.0)) {
+      return false;
+    }
+
     const truckData = createGarbageTruck(variant);
     truckData.mesh.position.set(LANES[lane], 0, spawnZ);
     scene.add(truckData.mesh);
@@ -2408,12 +2480,13 @@
       spawnModakParabolicArc(lane, spawnZ + 2.5, spawnZ - 9.0, 4.3, 4.5, 4.3, 7);
       // Rear descent leap (spawnZ - 9.0 down to spawnZ - 15.0):
       spawnModakParabolicArc(lane, spawnZ - 9.0, spawnZ - 15.0, 4.3, 2.8, 0.5, 5);
-    } else {
-      // Standard / Moving Blockage Trucks: Clean! No Modaks spawned on top!
     }
+    return true;
   }
 
   function spawnHighHurdleInLane(lane, spawnZ) {
+    if (!isLaneClearForObstacle(lane, spawnZ, 1.2, 5.0)) return false;
+
     const hurdleData = createHighHurdle();
     hurdleData.mesh.position.set(LANES[lane], 0, spawnZ);
     scene.add(hurdleData.mesh);
@@ -2445,9 +2518,12 @@
         hoverOffset: mz
       });
     }
+    return true;
   }
 
   function spawnLowBarricadeInLane(lane, spawnZ) {
+    if (!isLaneClearForObstacle(lane, spawnZ, 1.5, 5.0)) return false;
+
     const barData = createLowBarricade();
     barData.mesh.position.set(LANES[lane], 0, spawnZ);
     scene.add(barData.mesh);
@@ -2466,6 +2542,7 @@
 
     // Parabolic Modak jump arc over the roadblock!
     spawnModakParabolicArc(lane, spawnZ - 4.5, spawnZ + 4.5, 0.4, 3.2, 0.4, 7);
+    return true;
   }
 
   // ----------------------------------------------------
@@ -2481,38 +2558,18 @@
   }
 
   // ----------------------------------------------------
-  // FAIR OBSTACLE SPAWNING (PATH GUARANTEE SYSTEM)
-  // Ensures 3 solid garbage trucks NEVER block all 3 lanes
+  // GUARANTEED ESCAPE PATH & FAIR SPAWNING SYSTEM
+  // Strictly prevents 3 impassable trucks simultaneously
   // ----------------------------------------------------
-  function isLaneSolidTruckBlocked(lane, targetZ, radius = 22.0) {
-    for (let obs of activeObstacles) {
-      if (obs.lane === lane && obs.type === 'truck' && !obs.hasRamp) {
-        const halfL = (obs.length || 24.0) / 2;
-        if (Math.abs(obs.mesh.position.z - targetZ) <= (halfL + radius)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  function getSolidTruckBlockedLanes(targetZ) {
-    return [0, 1, 2].filter(l => isLaneSolidTruckBlocked(l, targetZ));
-  }
-
   function spawnWave() {
     const spawnZ = -SPAWN_DISTANCE;
 
-    // ----------------------------------------------------
-    // JETPACK COIN TRAILS (LINEAR DENSE SKY SPAWNING)
-    // When Jetpack is active, STOP spawning ground obstacles!
-    // ----------------------------------------------------
+    // 1. JETPACK COIN TRAILS (LINEAR DENSE SKY SPAWNING)
     if (isJetpackActive && !isJetpackDescending) {
       if (Math.random() < 0.32) {
         jetpackSkyLane = Math.floor(Math.random() * 3);
       }
 
-      // Dense straight line of Modaks perfectly aligned in the sky lane
       for (let mz = -14; mz <= 14; mz += 2.2) {
         const modakMesh = createModakModel();
         modakMesh.position.set(LANES[jetpackSkyLane], JETPACK_Y, spawnZ + mz);
@@ -2527,60 +2584,87 @@
           hoverOffset: mz
         });
       }
-      return; // Stop here! No ground obstacles during jetpack flight!
+      return; // No ground obstacles during jetpack flight!
     }
 
-    // Inspect existing solid trucks in upcoming section to prevent 3-lane impassable choke points
-    const blockedLanes = getSolidTruckBlockedLanes(spawnZ);
+    // 2. INSPECT UPCOMING Z-WINDOW ACROSS ALL 3 LANES
+    const laneStatus = [
+      getLaneTruckStatusAtZ(0, spawnZ),
+      getLaneTruckStatusAtZ(1, spawnZ),
+      getLaneTruckStatusAtZ(2, spawnZ)
+    ];
 
-    // If 2 or more lanes already have solid non-ramp trucks overlapping this Z-zone,
+    const solidTruckCount = laneStatus.filter(s => s === 'solid').length;
+    const truckClearLanes = [0, 1, 2].filter(l => isLaneClearForObstacle(l, spawnZ, TRUCK_LENGTH / 2, 16.0));
+
+    // GUARANTEED ESCAPE PATH INVARIANTS:
+    // Case A: If 2 lanes already have solid impassable trucks in this window,
     // we MUST NOT spawn any solid trucks! Provide an open Modak run or a Ramp Truck.
-    if (blockedLanes.length >= 2) {
-      const openLanes = [0, 1, 2].filter(l => !blockedLanes.includes(l));
-      const safeLane = openLanes.length > 0 ? openLanes[0] : 1;
-
-      if (Math.random() < 0.45) {
-        spawnTruckInLane(safeLane, 'ramp', spawnZ);
-      } else {
-        spawnLaneItem(safeLane, spawnZ);
+    if (solidTruckCount >= 2) {
+      const candidateLanes = truckClearLanes.filter(l => laneStatus[l] === 'none');
+      if (candidateLanes.length > 0) {
+        if (Math.random() < 0.45) {
+          spawnTruckInLane(candidateLanes[0], 'ramp', spawnZ);
+        } else {
+          spawnLaneItem(candidateLanes[0], spawnZ);
+        }
       }
       return;
     }
 
-    const rand = Math.random();
+    // Case B: If 1 lane already has a solid truck:
+    if (solidTruckCount === 1) {
+      const solidLane = laneStatus.indexOf('solid');
+      const otherLanes = [0, 1, 2].filter(l => l !== solidLane && truckClearLanes.includes(l));
 
-    // ----------------------------------------------------
-    // PATTERN 1: 2-LANE CHOKE POINT (GUARANTEED AT LEAST 1 RAMP + 1 CLEAR ESCAPE LANE)
-    // ----------------------------------------------------
-    if (rand < 0.22) {
-      const unblocked = [0, 1, 2].filter(l => !blockedLanes.includes(l));
-      const openLane = unblocked[Math.floor(Math.random() * unblocked.length)];
-      const targetBlocked = [0, 1, 2].filter(l => l !== openLane);
-
-      // FAIRNESS RULE: When 2 trucks spawn together, at least ONE must have an inclined front ramp!
-      // This guarantees the player can always leap/run on top of one or choose the open lane.
-      spawnTruckInLane(targetBlocked[0], 'ramp', spawnZ);
-
-      // Second truck can be moving or static, as long as it does not create a 3-lane wall
-      const secondVariant = Math.random() < 0.5 ? 'moving' : 'static';
-      spawnTruckInLane(targetBlocked[1], secondVariant, spawnZ);
-
-      // Open Lane: Guaranteed safe path with Modaks or paced power-up
-      spawnLaneItem(openLane, spawnZ);
+      // Spawn at most ONE more truck, and it MUST BE A RAMP TRUCK!
+      // This guarantees 2 escape options: climb the ramp or run in the open lane.
+      if (otherLanes.length >= 2) {
+        const rampLane = otherLanes[0];
+        const openLane = otherLanes[1];
+        spawnTruckInLane(rampLane, 'ramp', spawnZ);
+        spawnLaneItem(openLane, spawnZ);
+      } else if (otherLanes.length === 1) {
+        if (Math.random() < 0.45) {
+          spawnTruckInLane(otherLanes[0], 'ramp', spawnZ);
+        } else {
+          spawnLaneItem(otherLanes[0], spawnZ);
+        }
+      }
       return;
     }
 
-    // ----------------------------------------------------
-    // PATTERN 2: SINGLE GARBAGE TRUCK (RAMP, MOVING, OR STATIC)
-    // ----------------------------------------------------
-    if (rand < 0.58) {
-      const availableLanes = [0, 1, 2].filter(l => !blockedLanes.includes(l));
-      const truckLane = availableLanes.splice(Math.floor(Math.random() * availableLanes.length), 1)[0];
+    // Case C: 0 solid trucks currently in this window!
+    const rand = Math.random();
 
-      // If any other lane was already blocked ahead, force this truck to be a Ramp Truck!
-      const mustBeRamp = blockedLanes.length >= 1;
+    // PATTERN 1: 2-TRUCK FORMATION (1 RAMP TRUCK + 1 SOLID/MOVING TRUCK + 1 OPEN ESCAPE LANE)
+    if (rand < 0.25 && truckClearLanes.length >= 2) {
+      const shuffledClear = [...truckClearLanes].sort(() => Math.random() - 0.5);
+      const rampLane = shuffledClear[0];
+      const secondTruckLane = shuffledClear[1];
+      const openLanes = [0, 1, 2].filter(l => l !== rampLane && l !== secondTruckLane);
+      const openLane = openLanes.length > 0 ? openLanes[0] : null;
+
+      // 1. Guaranteed Ramp Truck (climbable escape route!)
+      spawnTruckInLane(rampLane, 'ramp', spawnZ);
+
+      // 2. Second truck (static or moving)
+      const secondVariant = Math.random() < 0.45 ? 'moving' : 'static';
+      spawnTruckInLane(secondTruckLane, secondVariant, spawnZ);
+
+      // 3. Guaranteed completely open lane
+      if (openLane !== null) {
+        spawnLaneItem(openLane, spawnZ);
+      }
+      return;
+    }
+
+    // PATTERN 2: SINGLE TRUCK (RAMP, MOVING, OR STATIC) + LOW HURDLE/BARRICADE
+    if (rand < 0.60 && truckClearLanes.length >= 1) {
+      const shuffledClear = [...truckClearLanes].sort(() => Math.random() - 0.5);
+      const truckLane = shuffledClear[0];
       const variantRoll = Math.random();
-      const variant = mustBeRamp ? 'ramp' : (variantRoll < 0.40 ? 'ramp' : (variantRoll < 0.72 ? 'moving' : 'static'));
+      const variant = variantRoll < 0.40 ? 'ramp' : (variantRoll < 0.72 ? 'moving' : 'static');
       spawnTruckInLane(truckLane, variant, spawnZ);
 
       const remainingLanes = [0, 1, 2].filter(l => l !== truckLane);
@@ -2589,7 +2673,7 @@
 
       spawnLaneItem(secondLane, spawnZ);
 
-      if (Math.random() < 0.45) {
+      if (Math.random() < 0.40) {
         spawnLowBarricadeInLane(thirdLane, spawnZ);
       } else {
         spawnLaneItem(thirdLane, spawnZ);
@@ -2597,14 +2681,12 @@
       return;
     }
 
-    // ----------------------------------------------------
     // PATTERN 3: HURDLES & BARRICADES (ROLL/SLIDE VS JUMP VARIETY)
-    // ----------------------------------------------------
-    if (rand < 0.84) {
-      const lanesAvailable = [0, 1, 2];
-      const hurdleLane = lanesAvailable.splice(Math.floor(Math.random() * lanesAvailable.length), 1)[0];
-      const barLane = lanesAvailable.splice(Math.floor(Math.random() * lanesAvailable.length), 1)[0];
-      const freeLane = lanesAvailable[0];
+    if (rand < 0.85) {
+      const lanesAvailable = [0, 1, 2].sort(() => Math.random() - 0.5);
+      const hurdleLane = lanesAvailable[0];
+      const barLane = lanesAvailable[1];
+      const freeLane = lanesAvailable[2];
 
       spawnHighHurdleInLane(hurdleLane, spawnZ);
       spawnLowBarricadeInLane(barLane, spawnZ);
@@ -2612,9 +2694,7 @@
       return;
     }
 
-    // ----------------------------------------------------
     // PATTERN 4: CLEAN MODAK & POWER-UP RUN
-    // ----------------------------------------------------
     for (let lane of [0, 1, 2]) {
       if (Math.random() < 0.78) {
         spawnLaneItem(lane, spawnZ);
@@ -2810,9 +2890,65 @@
   // ==========================================
   // INPUT CONTROLS & ACTIVATION
   // ==========================================
+  // ----------------------------------------------------
+  // LANE SWITCHING & ANTI-LANE-LOCKING PROTECTION
+  // Prevents player from trapping/clipping against truck sides
+  // ----------------------------------------------------
+  function canChangeToLane(targetLane) {
+    if (gameState !== STATE.PLAYING) return false;
+    const pz = playerGroup.position.z;
+    const py = playerGroup.position.y;
+
+    for (let i = 0; i < activeObstacles.length; i++) {
+      const obs = activeObstacles[i];
+      if (obs.lane !== targetLane || obs.type !== 'truck') continue;
+
+      const halfL = (obs.length || 24.0) / 2;
+      const rearZ = obs.mesh.position.z - halfL;
+      const frontZ = obs.mesh.position.z + halfL;
+
+      // Check if player is currently alongside the truck body:
+      if (pz >= rearZ - 0.8 && pz <= frontZ - 0.8) {
+        // If player is on the ground (below roof), the side wall blocks lane entry
+        const roof = obs.roofY || 3.8;
+        if (py < roof - 0.35) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function triggerSideBump(direction) {
+    playSideBumpSound();
+
+    // Tactile micro-nudge towards the truck that springs right back into current lane
+    const bumpOffset = direction * 0.28;
+    playerGroup.position.x = LANES[currentLane] + bumpOffset;
+
+    // Amber contact spark particles
+    createPopParticles(
+      new THREE.Vector3(
+        LANES[currentLane] + direction * 0.9,
+        Math.max(0.6, playerGroup.position.y + 0.6),
+        playerGroup.position.z
+      ),
+      0xf59e0b,
+      8,
+      2.2
+    );
+
+    // Subtle camera micro-shake
+    cameraShakeTimer = Math.max(cameraShakeTimer, 0.08);
+  }
+
   function moveLeft() {
     if (gameState !== STATE.PLAYING) return;
     if (currentLane > LANE_LEFT) {
+      if (!canChangeToLane(currentLane - 1)) {
+        triggerSideBump(-1);
+        return;
+      }
       currentLane--;
       targetX = LANES[currentLane];
       playTone(320, 'sine', 0.08, 0.06);
@@ -2822,6 +2958,10 @@
   function moveRight() {
     if (gameState !== STATE.PLAYING) return;
     if (currentLane < LANE_RIGHT) {
+      if (!canChangeToLane(currentLane + 1)) {
+        triggerSideBump(1);
+        return;
+      }
       currentLane++;
       targetX = LANES[currentLane];
       playTone(320, 'sine', 0.08, 0.06);
@@ -3585,6 +3725,7 @@
     slideTimer = 0;
     queuedSlide = false;
     spawnTimer = 0;
+    lastWaveSpawnDistance = 0;
     overbridgeTimer = 0;
     scenerySpawnTimer = 0;
 
@@ -4080,12 +4221,12 @@
 
       if (isSliding) {
         // Low sliding bounding box (Subway Surfers roll under hurdles)
-        playerColliderBox.min.set(px - 0.44, py + 0.02, pz - 0.52);
-        playerColliderBox.max.set(px + 0.44, py + 0.52, pz + 0.52);
+        playerColliderBox.min.set(px - 0.35, py + 0.02, pz - 0.44);
+        playerColliderBox.max.set(px + 0.35, py + 0.52, pz + 0.44);
       } else {
         // Standing / Running / Jumping bounding box (Full Ganesha with Mukut)
-        playerColliderBox.min.set(px - 0.38, py + 0.02, pz - 0.36);
-        playerColliderBox.max.set(px + 0.38, py + 1.72, pz + 0.36);
+        playerColliderBox.min.set(px - 0.32, py + 0.02, pz - 0.32);
+        playerColliderBox.max.set(px + 0.32, py + 1.72, pz + 0.32);
       }
 
       // ----------------------------------------
@@ -4123,9 +4264,10 @@
 
         const halfL = (obs.length || 2.0) / 2;
         const halfW = (obs.width || 2.4) / 2;
+        const truckHalfW = (obs.width || 2.4) * 0.40; // 0.96m snug lateral collision box
         const rearZ = obs.mesh.position.z - halfL;
         const frontZ = obs.mesh.position.z + halfL;
-        const isInsideX = Math.abs(px - obs.mesh.position.x) <= halfW + 0.12;
+        const isInsideX = Math.abs(px - obs.mesh.position.x) <= truckHalfW + 0.32;
 
         // ----------------------------------------------------
         // A. CLIMBABLE GARBAGE TRUCKS (STATIC, MOVING, RAMP)
@@ -4138,7 +4280,7 @@
 
             if (isInsideX) {
               // 1. Incline Ramp Zone: smoothly elevates player up to roof without jumping!
-              if (pz <= frontZ + 0.25 && pz >= roofZ) {
+              if (pz <= frontZ + 0.35 && pz >= roofZ) {
                 const t = THREE.MathUtils.clamp((frontZ - pz) / rampLength, 0, 1);
                 const rampH = t * obs.roofY;
                 currentBaseY = Math.max(currentBaseY, rampH);
@@ -4154,7 +4296,7 @@
                 standingOnTruck = true;
               }
               // 2. Flat Roof Zone behind ramp
-              else if (pz < roofZ && pz >= rearZ - 0.25) {
+              else if (pz < roofZ && pz >= rearZ - 0.35) {
                 if (playerY >= obs.roofY - 0.45) {
                   currentBaseY = obs.roofY;
                   if (playerY <= obs.roofY + 0.35 && playerVelocityY <= 0) {
@@ -4167,28 +4309,36 @@
                   }
                   standingOnTruck = true;
                 } else {
-                  // Under/beside container body at ground level: solid collision!
-                  truckBodyBox.min.set(obs.mesh.position.x - halfW * 0.95, 0.0, rearZ);
-                  truckBodyBox.max.set(obs.mesh.position.x + halfW * 0.95, obs.roofY, roofZ);
-                  if (playerColliderBox.intersectsBox(truckBodyBox)) {
+                  // Under/beside container body at ground level:
+                  // Check if frontal wall hit against container front:
+                  const isFrontalWallHit = (pz >= roofZ - 0.9 && pz <= roofZ + 0.6) && (Math.abs(px - obs.mesh.position.x) <= truckHalfW * 0.82);
+                  if (isFrontalWallHit) {
                     if (!isGadaActive) {
                       playerGroup.position.z = Math.max(playerGroup.position.z, roofZ + 0.42);
                       gameSpeed = 0;
                     }
                     handleCollision(obs, i);
                     continue;
+                  } else if (pz < roofZ - 0.9 && pz >= rearZ - 0.2) {
+                    // Lateral side contact: softly clamp player outside truck to prevent clipping or sticking
+                    if (Math.abs(px - obs.mesh.position.x) < truckHalfW + 0.36) {
+                      if (px > obs.mesh.position.x) {
+                        playerGroup.position.x = Math.max(playerGroup.position.x, obs.mesh.position.x + truckHalfW + 0.36);
+                      } else {
+                        playerGroup.position.x = Math.min(playerGroup.position.x, obs.mesh.position.x - truckHalfW - 0.36);
+                      }
+                      if (targetX === LANES[obs.lane]) targetX = LANES[currentLane];
+                    }
                   }
                 }
               }
             }
           } else {
             // SOLID BLOCKAGE TRUCK (No Ramp: Static or Moving)
-            truckBodyBox.min.set(obs.mesh.position.x - halfW * 0.95, 0.0, rearZ);
-            truckBodyBox.max.set(obs.mesh.position.x + halfW * 0.95, obs.roofY, frontZ);
+            const isInsideZ = pz >= rearZ - 0.35 && pz <= frontZ + 0.35;
 
-            // Can run on roof if already elevated (e.g. from super sneakers or dropping from sky)
-            const isInsideZ = pz >= rearZ - 0.25 && pz <= frontZ + 0.25;
-            if (isInsideX && isInsideZ && playerY >= obs.roofY - 0.40) {
+            // Running or landing on roof
+            if (isInsideX && isInsideZ && playerY >= obs.roofY - 0.45) {
               currentBaseY = obs.roofY;
               if (playerY <= obs.roofY + 0.35 && playerVelocityY <= 0) {
                 playerY = obs.roofY;
@@ -4199,14 +4349,32 @@
                 sneakersFlipAngle = 0;
               }
               standingOnTruck = true;
-            } else if (playerColliderBox.intersectsBox(truckBodyBox)) {
-              // FATAL SOLID IMPACT WITH TRUCK FRONT / SIDES!
-              if (!isGadaActive) {
-                playerGroup.position.z = Math.max(playerGroup.position.z, frontZ + 0.42);
-                gameSpeed = 0;
+            } else {
+              // Player at ground level:
+              // 1. True Frontal Crash: only when player runs head-on into the front bumper/cab!
+              const isFrontalHit = (pz >= frontZ - 1.2 && pz <= frontZ + 0.6) && (Math.abs(px - obs.mesh.position.x) <= truckHalfW * 0.82);
+
+              if (isFrontalHit) {
+                if (!isGadaActive) {
+                  playerGroup.position.z = Math.max(playerGroup.position.z, frontZ + 0.42);
+                  gameSpeed = 0;
+                }
+                handleCollision(obs, i);
+                continue;
+              } else if (pz < frontZ - 1.2 && pz >= rearZ - 0.2) {
+                // 2. Lateral side contact alongside the truck body:
+                // Smoothly clamp player position outside to prevent lane locking, clipping, or getting stuck!
+                if (Math.abs(px - obs.mesh.position.x) < truckHalfW + 0.36) {
+                  if (px > obs.mesh.position.x) {
+                    playerGroup.position.x = Math.max(playerGroup.position.x, obs.mesh.position.x + truckHalfW + 0.36);
+                  } else {
+                    playerGroup.position.x = Math.min(playerGroup.position.x, obs.mesh.position.x - truckHalfW - 0.36);
+                  }
+                  if (targetX === LANES[obs.lane]) {
+                    targetX = LANES[currentLane];
+                  }
+                }
               }
-              handleCollision(obs, i);
-              continue;
             }
           }
         }
@@ -4395,11 +4563,11 @@
         }
       }
 
-      // Dynamic obstacle spawn rate scaling with gameSpeed
-      const currentSpawnInterval = Math.max(0.60, SPAWN_INTERVAL * (BASE_SPEED / gameSpeed));
-      spawnTimer += delta;
-      if (spawnTimer >= currentSpawnInterval) {
-        spawnTimer = 0;
+      // Dynamic wave pacing: guaranteed distance buffer between successive obstacle waves
+      // Truck length is 24m; min spacing of 44m guarantees waves never overlap or bunch up!
+      const minWaveDistance = 44.0;
+      if ((totalDistanceRun - lastWaveSpawnDistance) >= minWaveDistance) {
+        lastWaveSpawnDistance = totalDistanceRun;
         spawnWave();
       }
 
