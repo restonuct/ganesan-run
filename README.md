@@ -1,7 +1,7 @@
 # 🐘 Eco-Friendly Ganesh Chaturthi Chase
 
 <p align="center">
-  <img src="title_logo.jpg" alt="Eco-Friendly Ganesh Chase Title Logo" width="100%" style="max-width: 820px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
+  <img src="header_logo.jpg" alt="Ganesh Chase Official Header Logo" width="100%" style="max-width: 820px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
 </p>
 
 [![Three.js](https://img.shields.io/badge/Three.js-r128-black?style=for-the-badge&logo=three.js)](https://threejs.org/)
@@ -15,6 +15,10 @@
 ---
 
 ## 📖 Overview
+
+<p align="center">
+  <img src="title_logo.jpg" alt="Eco-Friendly Ganesh Chase Game Artwork" width="100%" style="max-width: 820px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
+</p>
 
 In **Eco-Friendly Ganesh Chaturthi Chase**, the traditional endless runner narrative is turned upside down. The player controls **Lord Ganesha**, chasing a Polluter Villain who flees along the ceremonial highway, dropping hazardous waste, roadblocks, and garbage trucks. 
 
