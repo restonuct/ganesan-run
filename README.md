@@ -1,7 +1,7 @@
 # 🐘 ganesan-run: Eco-Friendly Ganesh Chaturthi Chase
 
 <p align="center">
-  <img src="header_logo.jpg" alt="Ganesh Chase Official Header Logo" width="100%" style="max-width: 820px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
+  <img src="assets/images/header_logo.jpg" alt="Ganesh Chase Official Header Logo" width="100%" style="max-width: 820px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
 </p>
 
 [![Repository](https://img.shields.io/badge/GitHub-ganesan--run-181717?style=for-the-badge&logo=github)](https://github.com/restonuct/ganesan-run)
@@ -19,7 +19,7 @@
 ## 📖 Overview & Story
 
 <p align="center">
-  <img src="title_logo.jpg" alt="Eco-Friendly Ganesh Chase Game Artwork" width="100%" style="max-width: 820px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
+  <img src="assets/images/title_logo.jpg" alt="Eco-Friendly Ganesh Chase Game Artwork" width="100%" style="max-width: 820px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
 </p>
 
 In **ganesan-run**, the endless runner genre meets divine mythology and environmental conservation:
@@ -120,7 +120,10 @@ Navigate to: [http://localhost:8088](http://localhost:8088)
 
 ```
 ganesan-run/
-├── assets/                     # 3D GLTF/GLB binary models
+├── assets/                     # 3D models & game media assets
+│   ├── images/                 # Branding, logos & artwork
+│   │   ├── header_logo.jpg     # Official header banner
+│   │   └── title_logo.jpg      # Official title art
 │   ├── ganesha.glb             # Lord Ganesha runner character
 │   ├── mooshikan.glb           # Sacred Mooshikan hoverboard
 │   ├── villain.glb             # Polluter villain runner
@@ -133,14 +136,25 @@ ganesan-run/
 │   ├── multiplier.glb          # 2X score star
 │   ├── modak.glb               # Sacred modak currency
 │   └── garbage_jar.glb         # Toxic road hazard barrel
-├── audio/                      # Game audio and music
-│   └── Endless Runner Festivity.wav # Festive BGM soundtrack
-├── index.html                  # Game container, HUD markup & modals
-├── style.css                   # Glassmorphic styling, responsive layout
-├── main.js                     # Game engine, physics loop, audio & state
-├── header_logo.jpg             # Header banner image
-├── title_logo.jpg              # Title screen art
-├── generate_*.py               # Procedural 3D asset generators
+├── audio/                      # Audio soundtrack & sound effects
+│   ├── Endless Runner Festivity.m4a # Fast-loading AAC BGM track
+│   └── Endless Runner Festivity.wav # High-fidelity master WAV soundtrack
+├── css/                        # UI Stylesheets
+│   └── style.css               # Glassmorphic UI styling & animations
+├── js/                         # JavaScript source code
+│   └── main.js                 # Three.js scene, game loop & state engine
+├── scripts/                    # Offline 3D asset generator tooling
+│   ├── generate_ganesha.py     # Procedural Ganesha GLB generator
+│   ├── generate_garbage_jar.py # Procedural Garbage Jar GLB generator
+│   ├── generate_jetpack.py     # Procedural Jetpack GLB generator
+│   ├── generate_magnet.py      # Procedural Magnet GLB generator
+│   ├── generate_modak.py       # Procedural Modak GLB generator
+│   ├── generate_mooshikan.py   # Procedural Mooshikan GLB generator
+│   ├── generate_multiplier.py  # Procedural Multiplier GLB generator
+│   ├── generate_shoes.py       # Procedural Shoes GLB generator
+│   ├── generate_truck.py       # Procedural Truck variants generator
+│   └── generate_villain.py     # Procedural Polluter Villain generator
+├── index.html                  # Core game entrypoint & glassmorphic HUD
 ├── LICENSE                     # MIT License
 └── README.md                   # Repository documentation
 ```
