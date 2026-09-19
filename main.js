@@ -971,9 +971,21 @@
     },
     // onError
     (url) => {
-      console.warn('Could not load asset from:', url);
+      console.warn('Could not load asset from:', url, '- falling back to procedural model');
+      assetsLoaded = true;
+      if (gameState === STATE.LOADING) {
+        gameState = STATE.MENU;
+      }
     }
   );
+
+  // Safety fallback timeout: transition to MENU if loading takes more than 2.5s
+  setTimeout(() => {
+    if (gameState === STATE.LOADING) {
+      assetsLoaded = true;
+      gameState = STATE.MENU;
+    }
+  }, 2500);
 
   const gltfLoader = new THREE.GLTFLoader(loadingManager);
 
@@ -3309,9 +3321,7 @@
       if (!soundEnabled) {
         pauseBGM();
       } else {
-        if (gameState === STATE.PLAYING) {
-          playBGM();
-        }
+        playBGM();
       }
     });
   }
@@ -3711,10 +3721,7 @@
   }
 
   function startGame() {
-    if (gameState === STATE.LOADING || !assetsLoaded) {
-      console.log('Assets still loading, please wait...');
-      return;
-    }
+    assetsLoaded = true;
     initAudio();
     playBGM();
     resetGame();
