@@ -355,9 +355,15 @@
   boardsRemaining = StorageManager.getMooshikanBoards(3);
 
   // ==========================================
-  // AUDIO SYNTHESIZER (Web Audio API)
+  // AUDIO SYNTHESIZER & BGM ENGINE
   // ==========================================
   let audioCtx = null;
+
+  // BGM Background Music (Loaded without autoplay to conform to browser media policies)
+  const bgmAudio = new Audio('audio/Endless Runner Festivity.wav');
+  bgmAudio.loop = true;
+  bgmAudio.preload = 'auto';
+  bgmAudio.volume = 0.5;
 
   function initAudio() {
     if (!audioCtx) {
@@ -366,6 +372,31 @@
     }
     if (audioCtx && audioCtx.state === 'suspended') {
       audioCtx.resume();
+    }
+  }
+
+  function playBGM() {
+    if (!soundEnabled || !bgmAudio) return;
+    if (bgmAudio.paused) {
+      const playPromise = bgmAudio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn('BGM playback waiting for user gesture:', err);
+        });
+      }
+    }
+  }
+
+  function pauseBGM() {
+    if (bgmAudio && !bgmAudio.paused) {
+      bgmAudio.pause();
+    }
+  }
+
+  function stopBGM() {
+    if (bgmAudio) {
+      bgmAudio.pause();
+      bgmAudio.currentTime = 0;
     }
   }
 
@@ -945,7 +976,7 @@
   const gltfLoader = new THREE.GLTFLoader(loadingManager);
 
   // 1. Modak (Collectibles)
-  gltfLoader.load('modak.glb', (gltf) => {
+  gltfLoader.load('assets/modak.glb', (gltf) => {
     const root = gltf.scene;
     root.traverse((child) => {
       if (child.isMesh) {
@@ -964,7 +995,7 @@
   });
 
   // 2a. Standard Garbage Truck (Solid Blockage Obstacle)
-  gltfLoader.load('truck.glb', (gltf) => {
+  gltfLoader.load('assets/truck.glb', (gltf) => {
     const root = gltf.scene;
     root.traverse((child) => {
       if (child.isMesh) {
@@ -976,7 +1007,7 @@
   });
 
   // 2b. Ramp Garbage Truck (Climbable Front-Ramp Obstacle)
-  gltfLoader.load('truck_ramp.glb', (gltf) => {
+  gltfLoader.load('assets/truck_ramp.glb', (gltf) => {
     const root = gltf.scene;
     root.traverse((child) => {
       if (child.isMesh) {
@@ -988,7 +1019,7 @@
   });
 
   // 2c. Moving Garbage Truck (Container Body with Side Chevrons)
-  gltfLoader.load('truck_moving.glb', (gltf) => {
+  gltfLoader.load('assets/truck_moving.glb', (gltf) => {
     const root = gltf.scene;
     root.traverse((child) => {
       if (child.isMesh) {
@@ -1000,7 +1031,7 @@
   });
 
   // 3. Polluter Villain (Target Ahead)
-  gltfLoader.load('villain.glb', (gltf) => {
+  gltfLoader.load('assets/villain.glb', (gltf) => {
     const root = gltf.scene;
     root.traverse((child) => {
       if (child.isMesh) {
@@ -1014,7 +1045,7 @@
   });
 
   // 4. Mooshikan Hoverboard (Shield Power-Up)
-  gltfLoader.load('mooshikan.glb', (gltf) => {
+  gltfLoader.load('assets/mooshikan.glb', (gltf) => {
     const root = gltf.scene;
     root.traverse((child) => {
       if (child.isMesh) {
@@ -1026,7 +1057,7 @@
   });
 
   // 5. Lord Ganesha (Playable Runner Character)
-  gltfLoader.load('ganesha.glb', (gltf) => {
+  gltfLoader.load('assets/ganesha.glb', (gltf) => {
     const root = gltf.scene;
     root.traverse((child) => {
       if (child.isMesh) {
@@ -1049,7 +1080,7 @@
   });
 
   // 6. Toxic Garbage Jar / Barrel (Roadblock Hazard)
-  gltfLoader.load('garbage_jar.glb', (gltf) => {
+  gltfLoader.load('assets/garbage_jar.glb', (gltf) => {
     const root = gltf.scene;
     root.traverse((child) => {
       if (child.isMesh) {
@@ -3269,6 +3300,13 @@
       soundEnabled = !soundEnabled;
       soundBtn.textContent = soundEnabled ? '🔊' : '🔇';
       soundBtn.classList.toggle('muted', !soundEnabled);
+      if (!soundEnabled) {
+        pauseBGM();
+      } else {
+        if (gameState === STATE.PLAYING) {
+          playBGM();
+        }
+      }
     });
   }
 
@@ -3294,6 +3332,7 @@
   function pauseGame() {
     if (gameState !== STATE.PLAYING) return;
     gameState = STATE.PAUSED;
+    pauseBGM();
     if (pauseModaks) pauseModaks.textContent = `${score}`;
     if (pauseDistance) pauseDistance.textContent = `${Math.round(totalDistanceRun)} m`;
     if (pauseOverlay) pauseOverlay.classList.remove('hidden');
@@ -3304,6 +3343,9 @@
     if (pauseOverlay) pauseOverlay.classList.add('hidden');
     clock.getDelta(); // Clear delta jump so entities don't skip
     gameState = STATE.PLAYING;
+    if (soundEnabled) {
+      playBGM();
+    }
   }
 
   function togglePause() {
@@ -3579,6 +3621,7 @@
     gameSpeed = 0;
     divineAscentTimer = 0;
 
+    stopBGM();
     playSacredTempleBell();
 
     removeMooshikanBoard();
@@ -3667,6 +3710,7 @@
       return;
     }
     initAudio();
+    playBGM();
     resetGame();
     gameState = STATE.PLAYING;
     if (controlsHint) controlsHint.classList.remove('faded');
