@@ -360,7 +360,7 @@
   let audioCtx = null;
 
   // BGM Background Music (Loaded without autoplay to conform to browser media policies)
-  const bgmAudio = new Audio('audio/Endless Runner Festivity.wav');
+  const bgmAudio = document.getElementById('bgm-track') || new Audio('audio/Endless%20Runner%20Festivity.wav');
   bgmAudio.loop = true;
   bgmAudio.preload = 'auto';
   bgmAudio.volume = 0.5;
@@ -377,7 +377,9 @@
 
   function playBGM() {
     if (!soundEnabled || !bgmAudio) return;
+    initAudio();
     if (bgmAudio.paused) {
+      bgmAudio.volume = 0.5;
       const playPromise = bgmAudio.play();
       if (playPromise !== undefined) {
         playPromise.catch((err) => {
@@ -3134,7 +3136,11 @@
       return;
     }
 
-    if (gameState === STATE.MENU || gameState === STATE.GAMEOVER) {
+    if (gameState === STATE.MENU) {
+      e.preventDefault();
+      startGame();
+      return;
+    } else if (gameState === STATE.GAMEOVER) {
       if (e.code === 'Space' || e.code === 'Enter' || e.code === 'ArrowUp' || e.code === 'KeyW') {
         e.preventDefault();
         startGame();
